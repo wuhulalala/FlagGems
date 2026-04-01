@@ -1186,6 +1186,24 @@ class KernelInfo:
     ndim: int
 
 
+def _any_complex(*args):
+    """Check if any argument is complex (tensor or scalar)."""
+    for a in args:
+        if isinstance(a, torch.Tensor) and a.is_complex():
+            return True
+        if isinstance(a, complex):
+            return True
+    return False
+
+
+_REAL_TO_COMPLEX = {
+    torch.float16: torch.complex32,
+    torch.bfloat16: torch.complex32,
+    torch.float32: torch.complex64,
+    torch.float64: torch.complex128,
+}
+
+
 class PointwiseDynamicFunction:
     """Utility to generate function for general pointwise operation. It generate wrapper & JITFunction
     which are specialized according to the rank of the task space(the broadcasted shape of all input tensors).
@@ -1207,7 +1225,31 @@ class PointwiseDynamicFunction:
         # cached kernel info for C++ integration
         self._kernel_info_cache: Mapping[str, KernelInfo] = {}
 
+        # complex dispatch support (set via register_complex)
+        self._complex_kernel = None  # None = no complex support registered
+        self._complex_elementwise = False  # True = elementwise (add/sub), no cross kernel needed
+
+    def register_complex(self, complex_kernel=None, fallback=None):
+        """Register complex number support for this kernel.
+
+        Args:
+            complex_kernel: A PointwiseDynamicFunction for cross-term ops (mul/div).
+                If None, uses elementwise mode (view_as_real, same kernel, view_as_complex).
+            fallback: A PointwiseDynamicFunction (tensor-tensor version) to use when
+                scalar operands need to be converted to tensors for complex dispatch.
+        """
+        if complex_kernel is not None:
+            self._complex_kernel = complex_kernel
+            self._complex_elementwise = False
+        else:
+            self._complex_elementwise = True
+        self._complex_fallback = fallback
+        return self
+
     def __call__(self, *args, **kwargs):
+        # complex dispatch: intercept before prepare_args
+        if (self._complex_elementwise or self._complex_kernel) and _any_complex(*args):
+            return self._call_complex(*args, **kwargs)
         # inputs must be passed by position, outputs must be passed by keyword
         ndim, args, kwargs = self.prepare_args(*args, **kwargs)
         overload = self.instantiate(ndim)
@@ -1220,6 +1262,223 @@ class PointwiseDynamicFunction:
         # that manually
         return self._unwrap(out)
 
+    def _to_complex_tensor(self, a, target_dtype, device):
+        """Convert a scalar or real tensor to a complex tensor."""
+        if isinstance(a, torch.Tensor):
+            if a.is_complex():
+                return a
+            if a.is_floating_point():
+                cdtype = _REAL_TO_COMPLEX.get(a.dtype, torch.complex64)
+            else:
+                # int/bool tensor: convert to float first
+                a = a.to(torch.float32)
+                cdtype = torch.complex64
+            return torch.complex(a, torch.zeros_like(a)).to(cdtype)
+        elif isinstance(a, complex):
+            return torch.tensor(a, dtype=target_dtype, device=device)
+        elif isinstance(a, (int, float)):
+            return torch.tensor(complex(a, 0), dtype=target_dtype, device=device)
+        return a
+
+    def _call_complex(self, *args, **kwargs):
+        """Handle complex inputs transparently."""
+        schema = self.fx
+
+        # If any operand is a scalar and we have a fallback (tensor-tensor kernel),
+        # convert scalar operands to tensors and delegate to fallback
+        if self._complex_fallback is not None:
+            # Extract operand indices from promotion_methods
+            operand_indices = set()
+            for pm in schema._promotion_methods:
+                for idx in pm[:-1]:
+                    operand_indices.add(idx)
+
+            new_args = []
+            device = None
+            for a in args:
+                if isinstance(a, torch.Tensor):
+                    device = a.device
+                    break
+            for i, a in enumerate(args):
+                if i in operand_indices and not isinstance(a, torch.Tensor):
+                    # Scalar operand — convert to tensor
+                    if isinstance(a, complex):
+                        dtype = torch.complex64
+                    elif isinstance(a, float):
+                        dtype = torch.float32
+                    else:
+                        dtype = torch.int64
+                    new_args.append(torch.tensor(a, dtype=dtype, device=device))
+                else:
+                    new_args.append(a)
+            return self._complex_fallback(*new_args, **kwargs)
+        schema = self.fx
+
+        # Extract operand indices from promotion_methods
+        # e.g. promotion_methods=[(0, 1, "DEFAULT")] → operand_indices={0, 1}
+        operand_indices = set()
+        for pm in schema._promotion_methods:
+            for idx in pm[:-1]:  # last element is the method string/enum
+                operand_indices.add(idx)
+
+        # Classify args: operands vs coefficients
+        operand_args = []   # (index, value)
+        coeff_args = []     # (index, value)
+        for i, a in enumerate(args):
+            if i in operand_indices:
+                operand_args.append((i, a))
+            else:
+                coeff_args.append((i, a))
+
+        # Find device from tensor operands
+        device = None
+        for _, a in operand_args:
+            if isinstance(a, torch.Tensor):
+                device = a.device
+                break
+
+        # Compute result_dtype
+        raw_operands = [a for _, a in operand_args]
+        if len(raw_operands) >= 2:
+            result_dtype = torch.result_type(raw_operands[0], raw_operands[1])
+        elif len(raw_operands) == 1 and isinstance(raw_operands[0], torch.Tensor):
+            result_dtype = raw_operands[0].dtype
+        else:
+            result_dtype = torch.complex64
+        if not result_dtype.is_complex:
+            result_dtype = _REAL_TO_COMPLEX.get(result_dtype, torch.complex64)
+
+        # Convert all operands to complex tensors
+        complex_tensors = []
+        for _, a in operand_args:
+            complex_tensors.append(self._to_complex_tensor(a, result_dtype, device))
+
+        # Check which original operands were complex
+        orig_is_complex = [
+            (isinstance(a, torch.Tensor) and a.is_complex()) or isinstance(a, complex)
+            for _, a in operand_args
+        ]
+        both_complex = all(orig_is_complex)
+
+        if self._complex_elementwise:
+            return self._call_complex_elementwise(
+                complex_tensors, coeff_args, operand_args, result_dtype, kwargs
+            )
+        elif self._complex_kernel is not None:
+            if both_complex:
+                return self._call_complex_cross(complex_tensors, coeff_args, result_dtype, kwargs)
+            else:
+                return self._call_complex_mixed(
+                    operand_args, coeff_args, result_dtype, device, kwargs
+                )
+
+    def _call_complex_mixed(self, tensor_args, non_tensor_args, result_dtype, device, kwargs):
+        """Mixed complex/real for cross ops.
+
+        For complex tensor: view_as_real → [..., 2]
+        For real tensor: unsqueeze(-1) → [..., 1] (broadcasts with [..., 2])
+        For real scalar: pass through (broadcasts naturally)
+        Then call self's real kernel, result is [..., 2], view_as_complex back.
+        """
+        real_parts = []
+        for _, a in tensor_args:
+            if isinstance(a, torch.Tensor) and a.is_complex():
+                real_parts.append(torch.view_as_real(a))
+            elif isinstance(a, complex):
+                t = torch.tensor(a, dtype=result_dtype, device=device)
+                real_parts.append(torch.view_as_real(t))
+            elif isinstance(a, torch.Tensor):
+                real_parts.append(a.unsqueeze(-1))
+            else:
+                real_parts.append(a)
+
+        # Promote to common real dtype
+        dtypes = [t.dtype for t in real_parts if isinstance(t, torch.Tensor)]
+        common_dtype = dtypes[0]
+        for d in dtypes[1:]:
+            common_dtype = torch.promote_types(common_dtype, d)
+        real_parts = [
+            t.to(common_dtype) if isinstance(t, torch.Tensor) else t
+            for t in real_parts
+        ]
+
+        # Rebuild args in original order
+        schema = self.fx
+        new_args = []
+        tensor_idx = 0
+        non_tensor_idx = 0
+        for i in range(schema.num_inputs()):
+            if schema.is_tensor(i):
+                new_args.append(real_parts[tensor_idx])
+                tensor_idx += 1
+            else:
+                new_args.append(non_tensor_args[non_tensor_idx][1])
+                non_tensor_idx += 1
+
+        # Call self with real tensors (bypass complex check via prepare_args directly)
+        ndim, prepared_args, prepared_kwargs = self.prepare_args(*new_args, **kwargs)
+        overload = self.instantiate(ndim)
+        out = overload(*prepared_args, **prepared_kwargs)
+        out_real = self._unwrap(out)
+
+        return torch.view_as_complex(out_real.contiguous()).to(result_dtype)
+
+    def _call_complex_elementwise(self, complex_tensors, coeff_args, operand_args, result_dtype, kwargs):
+        """Elementwise: view_as_real → call self (real kernel) → view_as_complex.
+
+        All operands (including scalars converted to complex tensors) get view_as_real.
+        Coefficients (like alpha) pass through unchanged.
+        """
+        real_tensors = [torch.view_as_real(t) for t in complex_tensors]
+
+        # Promote to common real dtype
+        common_dtype = real_tensors[0].dtype
+        for t in real_tensors[1:]:
+            common_dtype = torch.promote_types(common_dtype, t.dtype)
+        real_tensors = [t.to(common_dtype) for t in real_tensors]
+
+        # Rebuild args in original order: operands get real tensors, coefficients pass through
+        schema = self.fx
+        new_args = [None] * schema.num_inputs()
+        tensor_idx = 0
+        coeff_idx = 0
+        for i in range(schema.num_inputs()):
+            # Check if this index is an operand
+            is_operand = any(idx == i for idx, _ in operand_args)
+            if is_operand:
+                new_args[i] = real_tensors[tensor_idx]
+                tensor_idx += 1
+            else:
+                new_args[i] = coeff_args[coeff_idx][1]
+                coeff_idx += 1
+
+        # Call self with real tensors (bypass complex check via prepare_args directly)
+        ndim, prepared_args, prepared_kwargs = self.prepare_args(*new_args, **kwargs)
+        overload = self.instantiate(ndim)
+        out = overload(*prepared_args, **prepared_kwargs)
+        out_real = self._unwrap(out)
+
+        return torch.view_as_complex(out_real.contiguous()).to(result_dtype)
+
+    def _call_complex_cross(self, complex_tensors, non_tensor_args, result_dtype, kwargs):
+        """Cross-term: split ar/ai/br/bi → call complex_kernel → stack → view_as_complex."""
+        A, B = complex_tensors[0], complex_tensors[1]
+        Ar = torch.view_as_real(A)
+        Br = torch.view_as_real(B)
+        ar, ai = Ar[..., 0], Ar[..., 1]
+        br, bi = Br[..., 0], Br[..., 1]
+
+        # Promote real parts to common dtype
+        common_dtype = torch.promote_types(ar.dtype, br.dtype)
+        ar, ai = ar.to(common_dtype), ai.to(common_dtype)
+        br, bi = br.to(common_dtype), bi.to(common_dtype)
+
+        # Call the cross-term kernel
+        real, imag = self._complex_kernel(ar, ai, br, bi)
+
+        out = torch.stack((real, imag), dim=-1)
+        return torch.view_as_complex(out.contiguous()).to(result_dtype)
+
     @staticmethod
     def use_fast_path(tensors):
         return all_the_same_shape(tensors) and (
@@ -1230,7 +1489,7 @@ class PointwiseDynamicFunction:
             )
         )
 
-    def prepare_args(self, *args, **kwargs):
+    def prepare_args(self, *args, _skip_tensor_check=False, **kwargs):
         # output allocation(when needed)
         # task simplification & task-rank infernece & input-output reinterpretation
         schema = self.fx
@@ -1243,7 +1502,7 @@ class PointwiseDynamicFunction:
             else:
                 outputs_that_need_allocation.append(i)
         # input arguments must be passed by position
-        if schema._is_tensor is not None:
+        if not _skip_tensor_check and schema._is_tensor is not None:
             if not check_tensor_attributes(args, (schema._is_tensor)):
                 raise ValueError(
                     "Input arguments must be passed by position, and the corresponding dtype must be specified."
