@@ -4,6 +4,7 @@ import torch
 import triton
 
 from flag_gems.utils import pointwise_dynamic
+from flag_gems.utils.pointwise_dynamic import ComplexMode
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,8 @@ def mul_complex_kernel(ar, ai, br, bi):
 
 
 # Register complex support
-mul_func.register_complex(mul_complex_kernel)
-mul_func_scalar.register_complex(fallback=mul_func)
+mul_func.register_complex(mode=ComplexMode.CROSS, cross_kernel=mul_complex_kernel)
+mul_func_scalar.register_complex(mode=ComplexMode.CROSS, tensorize_scalars=True, fallback_target=mul_func)
 
 
 def mul(A, B):

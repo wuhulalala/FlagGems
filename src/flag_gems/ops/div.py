@@ -5,6 +5,7 @@ import triton
 import triton.language as tl
 
 from flag_gems.utils import pointwise_dynamic
+from flag_gems.utils.pointwise_dynamic import ComplexMode
 from flag_gems.utils.triton_lang_extension import div_rn, div_rz, fmod, trunc
 
 logger = logging.getLogger(__name__)
@@ -61,9 +62,9 @@ def true_div_func_scalar_tensor(x, y):
 
 
 # Register complex support
-true_div_func.register_complex(div_complex_kernel)
-true_div_func_tensor_scalar.register_complex(fallback=true_div_func)
-true_div_func_scalar_tensor.register_complex(fallback=true_div_func)
+true_div_func.register_complex(mode=ComplexMode.CROSS, cross_kernel=div_complex_kernel)
+true_div_func_tensor_scalar.register_complex(mode=ComplexMode.CROSS, tensorize_scalars=True, fallback_target=true_div_func)
+true_div_func_scalar_tensor.register_complex(mode=ComplexMode.CROSS, tensorize_scalars=True, fallback_target=true_div_func)
 
 
 def true_divide(A, B):
