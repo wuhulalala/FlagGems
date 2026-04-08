@@ -1,5 +1,6 @@
 from flag_gems.utils.libentry import libentry, libtuner
 from flag_gems.utils.pointwise_dynamic import (
+    ComplexMode,
     KernelInfo,
     PointwiseDynamicFunction,
     pointwise_dynamic,
@@ -17,6 +18,7 @@ from flag_gems.utils.triton_lang_helper import tl_extra_shim
 __all__ = [
     "libentry",
     "libtuner",
+    "ComplexMode",
     "pointwise_dynamic",
     "KernelInfo",
     "PointwiseDynamicFunction",
