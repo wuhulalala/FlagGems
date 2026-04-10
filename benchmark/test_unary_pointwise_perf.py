@@ -40,11 +40,6 @@ class UnaryPointwiseBenchmark(Benchmark):
 
 
 forward_operations = [
-    (
-        "functional_sym_constrain_range_for_size",
-        torch.ops.aten._functional_sym_constrain_range_for_size,
-        FLOAT_DTYPES,
-    ),
     ("abs", torch.abs, FLOAT_DTYPES),
     ("absolute", torch.absolute, FLOAT_DTYPES),
     ("alias_copy", torch.ops.aten.alias_copy, FLOAT_DTYPES),
@@ -53,7 +48,9 @@ forward_operations = [
     ("erf", torch.erf, FLOAT_DTYPES),
     ("exp", torch.exp, FLOAT_DTYPES),
     ("exp2", torch.exp2, FLOAT_DTYPES),
+    ("expm1", torch.expm1, FLOAT_DTYPES),
     ("neg", torch.neg, FLOAT_DTYPES),
+    ("square", torch.square, FLOAT_DTYPES),
     ("reciprocal", torch.reciprocal, FLOAT_DTYPES),
     ("sqrt", torch.sqrt, FLOAT_DTYPES),
     ("rsqrt", torch.rsqrt, FLOAT_DTYPES),
@@ -93,6 +90,7 @@ forward_operations = [
     # Numerical Checks
     ("isinf", torch.isinf, FLOAT_DTYPES),
     ("isnan", torch.isnan, FLOAT_DTYPES),
+    ("isneginf", torch.isneginf, FLOAT_DTYPES),
     ("isfinite", torch.isfinite, FLOAT_DTYPES),
 ]
 
@@ -127,10 +125,12 @@ forward_inplace_operations = [
     ("erf_", torch.erf_, FLOAT_DTYPES),
     ("exp_", torch.exp_, FLOAT_DTYPES),
     ("exp2_", torch.exp2_, FLOAT_DTYPES),
+    ("expm1_", torch.expm1_, FLOAT_DTYPES),
     ("neg_", torch.neg_, FLOAT_DTYPES),
     ("reciprocal_", torch.reciprocal_, FLOAT_DTYPES),
     ("sqrt_", torch.sqrt_, FLOAT_DTYPES),
     ("rsqrt_", torch.rsqrt_, FLOAT_DTYPES),
+    ("square_", torch.square_, FLOAT_DTYPES),
     # Activation operations
     ("celu_", torch.nn.functional.celu_, FLOAT_DTYPES),
     ("elu_", torch.nn.functional.elu_, FLOAT_DTYPES),
