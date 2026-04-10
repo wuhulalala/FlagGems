@@ -4,7 +4,6 @@ import multiprocessing
 import pytest
 import torch
 import triton
-import triton.language as tl
 
 import flag_gems
 from flag_gems.utils import get_device_properties
