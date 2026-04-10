@@ -946,7 +946,7 @@ def test_dynamic_function_with_multiprocess(use_block_pointer):
             torch.testing.assert_close(out, expected_out)
 
 
-#Complex number tests
+# Complex number tests
 
 COMPLEX_DTYPES = [torch.complex64, torch.complex128]
 
@@ -1136,6 +1136,7 @@ def test_complex_cross_broadcast(dtype):
 @pytest.mark.parametrize("dtype", COMPLEX_DTYPES)
 def test_complex_real_inputs_bypass(dtype):
     """When all inputs are real, complex-registered kernel should still work."""
+
     @pointwise_dynamic(
         is_tensor=[True, True, False], promotion_methods=[(0, 1, "DEFAULT")]
     )
@@ -1152,4 +1153,3 @@ def test_complex_real_inputs_bypass(dtype):
     alpha = 1.0
     out = add_func(a, b, alpha)
     torch.testing.assert_close(out, a + b * alpha)
-

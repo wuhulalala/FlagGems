@@ -1190,7 +1190,7 @@ class KernelInfo:
 class ComplexMode(Enum):
     NONE = auto()
     ELEMENTWISE = auto()  # add/sub: view_as_real → same kernel → view_as_complex
-    CROSS = auto()        # mul/div: split ar/ai/br/bi → cross_kernel
+    CROSS = auto()  # mul/div: split ar/ai/br/bi → cross_kernel
 
 
 @dataclass
@@ -1246,7 +1246,9 @@ class PointwiseDynamicFunction:
 
     # -------------------- register_complex --------------------
 
-    def register_complex(self, mode, cross_kernel=None, tensorize_scalars=False, fallback_target=None):
+    def register_complex(
+        self, mode, cross_kernel=None, tensorize_scalars=False, fallback_target=None
+    ):
         """Register complex number support for this kernel.
 
         Args:
@@ -1283,7 +1285,9 @@ class PointwiseDynamicFunction:
 
     @staticmethod
     def _is_complex_arg(a):
-        return (isinstance(a, torch.Tensor) and a.is_complex()) or isinstance(a, complex)
+        return (isinstance(a, torch.Tensor) and a.is_complex()) or isinstance(
+            a, complex
+        )
 
     def _should_use_complex_path(self, args):
         if self.complex_strategy.mode == ComplexMode.NONE:
@@ -1398,7 +1402,9 @@ class PointwiseDynamicFunction:
         if strategy.mode == ComplexMode.CROSS and classification == "all_complex":
             return self._call_complex_cross(operands, result_dtype)
         elif classification in ("all_complex", "mixed"):
-            return self._call_complex_elementwise(operands, others, result_dtype, kwargs)
+            return self._call_complex_elementwise(
+                operands, others, result_dtype, kwargs
+            )
         else:
             new_args = self._merge_args(operands, others)
             return self._call_real_impl(*new_args, **kwargs)

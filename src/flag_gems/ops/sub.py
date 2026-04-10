@@ -33,8 +33,12 @@ def sub_func_scalar_tensor(x, y, alpha):
 
 # Register complex support (elementwise)
 sub_func.register_complex(mode=ComplexMode.ELEMENTWISE)
-sub_func_tensor_scalar.register_complex(mode=ComplexMode.ELEMENTWISE, tensorize_scalars=True, fallback_target=sub_func)
-sub_func_scalar_tensor.register_complex(mode=ComplexMode.ELEMENTWISE, tensorize_scalars=True, fallback_target=sub_func)
+sub_func_tensor_scalar.register_complex(
+    mode=ComplexMode.ELEMENTWISE, tensorize_scalars=True, fallback_target=sub_func
+)
+sub_func_scalar_tensor.register_complex(
+    mode=ComplexMode.ELEMENTWISE, tensorize_scalars=True, fallback_target=sub_func
+)
 
 
 def sub(A, B, *, alpha=1):

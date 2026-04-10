@@ -35,7 +35,9 @@ def mul_complex_kernel(ar, ai, br, bi):
 
 # Register complex support
 mul_func.register_complex(mode=ComplexMode.CROSS, cross_kernel=mul_complex_kernel)
-mul_func_scalar.register_complex(mode=ComplexMode.CROSS, tensorize_scalars=True, fallback_target=mul_func)
+mul_func_scalar.register_complex(
+    mode=ComplexMode.CROSS, tensorize_scalars=True, fallback_target=mul_func
+)
 
 
 def mul(A, B):
