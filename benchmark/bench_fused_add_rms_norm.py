@@ -3,15 +3,19 @@ Benchmark: fused_add_rms_norm
 Compares: FlagGems vs torch.compile vs vLLM (if available)
 """
 
-import torch
 import time
+
+import torch
+
 import flag_gems
+
 
 # ── reference: naive torch ──────────────────────────────────────────────
 def torch_fused_add_rms_norm(x, residual, weight, eps=1e-5):
     x = x + residual
     variance = x.pow(2).mean(-1, keepdim=True)
     return x * torch.rsqrt(variance + eps) * weight, x
+
 
 # ── reference: torch.compile ────────────────────────────────────────────
 @torch.compile
@@ -20,15 +24,19 @@ def compiled_fused_add_rms_norm(x, residual, weight, eps=1e-5):
     variance = x.pow(2).mean(-1, keepdim=True)
     return x * torch.rsqrt(variance + eps) * weight, x
 
+
 # ── reference: vLLM ─────────────────────────────────────────────────────
 try:
     import os
+
     os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
     from vllm._custom_ops import fused_add_rms_norm as vllm_fused_add_rms_norm
+
     HAS_VLLM = True
 except (ImportError, AttributeError):
     HAS_VLLM = False
     print("vLLM not available, skipping vLLM baseline\n")
+
 
 # ── benchmark helper ────────────────────────────────────────────────────
 def bench_fn(fn, warmup=20, rep=100):
@@ -41,6 +49,7 @@ def bench_fn(fn, warmup=20, rep=100):
     torch.cuda.synchronize()
     t1 = time.perf_counter()
     return (t1 - t0) / rep * 1000  # ms
+
 
 # ── main ────────────────────────────────────────────────────────────────
 shapes = [
@@ -90,6 +99,7 @@ for shape in shapes:
                 xc = x_ref.clone()
                 rc = r_ref.clone()
                 vllm_fused_add_rms_norm(xc, rc, w, eps)
+
             t_vllm = bench_fn(run_vllm)
 
         # ── FlagGems ──
@@ -97,6 +107,7 @@ for shape in shapes:
             xc = x_ref.clone()
             rc = r_ref.clone()
             flag_gems.fused_add_rms_norm(xc, rc, (N,), w, eps)
+
         t_gems = bench_fn(run_gems)
 
         # ── print ──
