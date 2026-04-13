@@ -6,8 +6,8 @@ import triton
 import triton.language as tl
 
 from flag_gems import runtime
-from flag_gems.runtime import torch_device_fn
 from flag_gems.ops.mm import get_higher_dtype
+from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import broadcastable_to, libentry, libtuner
 from flag_gems.utils import triton_lang_extension as tle
 
