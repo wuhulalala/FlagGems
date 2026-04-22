@@ -49,7 +49,6 @@ def baddbmm_kernel(
     bias_batch_stride: tl.constexpr,
     bias_M_stride: tl.constexpr,
     bias_N_stride: tl.constexpr,
-    IS_FP64: tl.constexpr = False,
 ):
     # batch offsets
     pid_b = tle.program_id(2)
@@ -90,10 +89,7 @@ def baddbmm_kernel(
     o_ptrs = O + offs_m[:, None] * N + offs_n[None, :]
 
     num_iters = tl.cdiv(K, TILE_K)
-    if IS_FP64:
-        accumulator = tl.zeros((TILE_M, TILE_N), dtype=tl.float64)
-    else:
-        accumulator = tl.zeros((TILE_M, TILE_N), dtype=tl.float32)
+    accumulator = tl.zeros((TILE_M, TILE_N), dtype=tl.float32)
     for _ in range(num_iters):
         if DIVISIBLE_K:
             if DIVISIBLE_M:
@@ -177,7 +173,6 @@ class BaddbmmFunction(torch.autograd.Function):
                 bias_batch_stride=bias_batch_stride,
                 bias_M_stride=bias_M_stride,
                 bias_N_stride=bias_N_stride,
-                IS_FP64=A.dtype == torch.float64,
             )
         return out
 

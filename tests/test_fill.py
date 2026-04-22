@@ -96,6 +96,8 @@ def test_fill_scalar_(value, shape, dtype):
     ref_x.fill_(value)
     with flag_gems.use_gems():
         x.fill_(value)
+
+
 FILL_SLICE_CASES = [
     # (shape, slice)
     ((4, 128), (slice(None), slice(64, None))),
@@ -104,7 +106,7 @@ FILL_SLICE_CASES = [
 ]
 
 
-@pytest.mark.fill
+@pytest.mark.fill_scalar_
 @pytest.mark.parametrize("shape, slc", FILL_SLICE_CASES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES + utils.BOOL_TYPES)
 @pytest.mark.parametrize(
@@ -144,7 +146,9 @@ def test_fill_(value, shape, dtype):
         x.fill_(value_tensor)
 
     utils.gems_assert_equal(x, ref_x)
-@pytest.mark.fill
+
+
+@pytest.mark.fill_tensor_
 @pytest.mark.parametrize("shape, slc", FILL_SLICE_CASES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES + utils.BOOL_TYPES)
 @pytest.mark.parametrize("value", [0, 1, True], ids=["zero", "one", "true"])
