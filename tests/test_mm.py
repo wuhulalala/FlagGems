@@ -66,7 +66,8 @@ def test_mm(M, N, K, dtype, b_column_major):
     utils.gems_assert_close(res_out, ref_out, dtype, reduce_dim=K)
 
 
-@pytest.mark.@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.mm
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_mm_broadcast_stride_zero(dtype):
     """Regression test: broadcast tensors (stride=0) must not crash TMA path."""
     torch.manual_seed(0)
@@ -131,5 +132,3 @@ def test_mm_out_self_transpose(M, K, dtype):
         torch.mm(mat, mat.t(), out=out)
 
     utils.gems_assert_close(out, ref_out, dtype, reduce_dim=K)
-
-
