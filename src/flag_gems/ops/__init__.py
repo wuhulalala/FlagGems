@@ -193,6 +193,10 @@ from flag_gems.ops.max_pool2d_with_indices import (
     max_pool2d_backward,
     max_pool2d_with_indices,
 )
+from flag_gems.ops.max_pool3d_with_indices import (
+    max_pool3d_backward,
+    max_pool3d_with_indices,
+)
 from flag_gems.ops.maximum import maximum
 from flag_gems.ops.mean import mean, mean_dim
 from flag_gems.ops.min import min, min_dim
@@ -228,6 +232,7 @@ from flag_gems.ops.per_token_group_quant_fp8 import (
     SUPPORTED_FP8_DTYPE,
     per_token_group_quant_fp8,
 )
+from flag_gems.ops.pixel_shuffle import pixel_shuffle
 from flag_gems.ops.pixel_unshuffle import pixel_unshuffle, pixel_unshuffle_out
 from flag_gems.ops.polar import polar
 from flag_gems.ops.pow import (
@@ -582,6 +587,8 @@ __all__ = [
     "max_dim",
     "max_pool2d_with_indices",
     "max_pool2d_backward",
+    "max_pool3d_with_indices",
+    "max_pool3d_backward",
     "maximum",
     "mean",
     "mean_dim",
@@ -618,6 +625,7 @@ __all__ = [
     "one_hot",
     "pad",
     "per_token_group_quant_fp8",
+    "pixel_shuffle",
     "pixel_unshuffle",
     "pixel_unshuffle_out",
     "polar",
