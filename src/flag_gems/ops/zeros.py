@@ -15,12 +15,13 @@
 import logging
 
 import torch
+import trident
 import triton
 import triton.language as tl
 
 from flag_gems.runtime import device, torch_device_fn
-from flag_gems.utils import triton_lang_extension as ext
 from flag_gems.utils.shape_utils import volume
+from flag_gems.utils.triton_lang_extension import program_id
 
 device_ = device
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ def zeros_kernel(
     n_elements,
     BLOCK_SIZE: tl.constexpr,
 ):
-    pid = ext.program_id(axis=0)  # We use a 1D launch grid so axis is 0.
+    pid = program_id(axis=0)  # We use a 1D launch grid so axis is 0.
     block_start = pid * BLOCK_SIZE
     offsets = block_start + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
@@ -54,6 +55,7 @@ def zeros(size, *, dtype=None, layout=None, device=None, pin_memory=None):
     return out
 
 
+@trident.jit
 def zero_(x: torch.Tensor) -> torch.Tensor:
     logger.debug("GEMS ZERO_")
     N = x.numel()

@@ -25,6 +25,16 @@ from . import backend_utils
 from .backend_utils import BackendEventBase
 
 
+def _is_operator_function(obj):
+    if inspect.isfunction(obj):
+        return True
+    # A decorated backend entrypoint is no longer a Python function. Do not
+    # silently discard it and fall back to the generic implementation.
+    backend = sys.modules.get("trident.backend")
+    graph_type = getattr(backend, "TridentGraphModule", None)
+    return graph_type is not None and isinstance(obj, graph_type)
+
+
 class BackendState:
     """Singleton class to manage backend state variables."""
 
@@ -96,7 +106,7 @@ class TritonVersionEvent(BackendEventBase):
         }.get(dir_name, None)
 
     def get_functions_from_module(self, module):
-        return inspect.getmembers(module, inspect.isfunction) if module else []
+        return inspect.getmembers(module, _is_operator_function) if module else []
 
     def get_version_spec_module(self):
         module_name = f"triton_{self.version}"
@@ -149,7 +159,7 @@ class BackendArchEvent(BackendEventBase):
         return self.has_arch
 
     def get_functions_from_module(self, module):
-        return inspect.getmembers(module, inspect.isfunction) if module else []
+        return inspect.getmembers(module, _is_operator_function) if module else []
 
     def get_heuristics_configs(self):
         try:
@@ -405,10 +415,10 @@ def get_customized_ops(vendor_name=None):
         return _state.customized_ops
     _state.customized_ops = []
     if _state.ops_module is not None:
-        ops = inspect.getmembers(_state.ops_module, inspect.isfunction)
+        ops = inspect.getmembers(_state.ops_module, _is_operator_function)
         _state.customized_ops += ops
     if _state.fused_module is not None:
-        fused_ops = inspect.getmembers(_state.fused_module, inspect.isfunction)
+        fused_ops = inspect.getmembers(_state.fused_module, _is_operator_function)
         _state.customized_ops += fused_ops
     return _state.customized_ops
 

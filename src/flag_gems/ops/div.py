@@ -253,7 +253,7 @@ def _float_floordiv(x, y):
     return out.to(orig_dtype)
 
 
-@pointwise_dynamic(promotion_methods=[(0, 1, "DEFAULT")])
+@pointwise_dynamic(promotion_methods=[(0, 1, "DEFAULT")], enable_trident=True)
 @triton.jit
 def floor_div_func(x, y):
     if x.type.scalar.is_int() & y.type.scalar.is_int():
@@ -262,7 +262,9 @@ def floor_div_func(x, y):
         return _float_floordiv(x, y)
 
 
-@pointwise_dynamic(is_tensor=[True, False], promotion_methods=[(0, 1, "DEFAULT")])
+@pointwise_dynamic(
+    is_tensor=[True, False], promotion_methods=[(0, 1, "DEFAULT")], enable_trident=True
+)
 @triton.jit
 def floor_div_func_tensor_scalar(x, y):
     if x.type.scalar.is_int() & y.type.scalar.is_int():
@@ -271,7 +273,9 @@ def floor_div_func_tensor_scalar(x, y):
         return _float_floordiv(x, y)
 
 
-@pointwise_dynamic(is_tensor=[False, True], promotion_methods=[(0, 1, "DEFAULT")])
+@pointwise_dynamic(
+    is_tensor=[False, True], promotion_methods=[(0, 1, "DEFAULT")], enable_trident=True
+)
 @triton.jit
 def floor_div_func_scalar_tensor(x, y):
     if x.type.scalar.is_int() & y.type.scalar.is_int():

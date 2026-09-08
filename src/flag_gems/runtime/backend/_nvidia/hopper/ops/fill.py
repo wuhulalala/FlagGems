@@ -15,6 +15,7 @@
 import logging
 
 import torch
+import trident
 import triton
 import triton.language as tl
 
@@ -128,41 +129,43 @@ def fill_tensor_out(input, value, *, out=None):
     return out
 
 
-def fill_tensor_(self, value):
+@trident.jit
+def fill_tensor_(inp, value):
     if not value.is_cuda:
-        return fill_scalar_(self, value.item())
+        return fill_scalar_(inp, value.item())
     logger.debug("GEMS_NVIDIA FILL_TENSOR_")
     if value.ndim != 0:
         raise RuntimeError(
             f"fill only supports 0-dimension value tensor but got tensor with {value.ndim} dimensions."
         )
-    if self.is_contiguous():
-        n_elements = self.numel()
+    if inp.is_contiguous():
+        n_elements = inp.numel()
         grid = (triton.cdiv(n_elements, 1024),)
-        with torch_device_fn.device(self.device):
-            fill_tensor_kernel[grid](self, value, n_elements, BLOCK_SIZE=1024)
+        with torch_device_fn.device(inp.device):
+            fill_tensor_kernel[grid](inp, value, n_elements, BLOCK_SIZE=1024)
     else:
-        tmp = self.contiguous()
+        tmp = inp.contiguous()
         n_elements = tmp.numel()
         grid = (triton.cdiv(n_elements, 1024),)
-        with torch_device_fn.device(self.device):
+        with torch_device_fn.device(inp.device):
             fill_tensor_kernel[grid](tmp, value, n_elements, BLOCK_SIZE=1024)
-        self.copy_(tmp)
-    return self
+        inp.copy_(tmp)
+    return inp
 
 
-def fill_scalar_(self, value):
+@trident.jit(dynamic=False)
+def fill_scalar_(inp, value):
     logger.debug("GEMS_NVIDIA FILL_SCALAR_")
-    if self.is_contiguous():
-        n_elements = self.numel()
+    if inp.is_contiguous():
+        n_elements = inp.numel()
         grid = (triton.cdiv(n_elements, 1024),)
-        with torch_device_fn.device(self.device):
-            fill_scalar_kernel[grid](self, value, n_elements, BLOCK_SIZE=1024)
+        with torch_device_fn.device(inp.device):
+            fill_scalar_kernel[grid](inp, value, n_elements, BLOCK_SIZE=1024)
     else:
-        tmp = self.contiguous()
+        tmp = inp.contiguous()
         n_elements = tmp.numel()
         grid = (triton.cdiv(n_elements, 1024),)
-        with torch_device_fn.device(self.device):
+        with torch_device_fn.device(inp.device):
             fill_scalar_kernel[grid](tmp, value, n_elements, BLOCK_SIZE=1024)
-        self.copy_(tmp)
-    return self
+        inp.copy_(tmp)
+    return inp

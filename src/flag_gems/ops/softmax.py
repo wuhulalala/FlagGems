@@ -15,19 +15,18 @@
 import logging
 
 import torch
+import trident
 import triton
 import triton.language as tl
 
 from flag_gems import runtime
 from flag_gems.ops.zeros import zero_
 from flag_gems.runtime import torch_device_fn
-from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as ext
 
 logger = logging.getLogger(__name__)
 
 
-@libentry()
 @triton.heuristics(runtime.get_heuristic_config("softmax_non_inner"))
 @triton.jit
 def softmax_kernel_non_inner(
@@ -101,7 +100,6 @@ def prev_multiple_of(a, b):
     return tl.cdiv(a, b) * b - b
 
 
-@libentry()
 @triton.heuristics(runtime.get_heuristic_config("softmax_inner"))
 @triton.jit
 def softmax_kernel_inner(
@@ -177,7 +175,6 @@ def softmax_kernel_inner(
 
 
 # ------------------------  backward -------------------------------
-@libentry()
 @triton.autotune(
     configs=runtime.get_tuned_config("softmax_non_inner"),
     key=[
@@ -237,7 +234,6 @@ def softmax_backward_kernel_non_inner(
             offsets += TILE_N * K
 
 
-@libentry()
 @triton.autotune(
     configs=runtime.get_tuned_config("softmax_inner"),
     key=["M", "N"],
@@ -342,20 +338,21 @@ def softmax_out(self, dim, half_to_float=False, *, out):
     return out
 
 
-def softmax(self, dim, half_to_float=False):
+@trident.jit
+def softmax(inp, dim, half_to_float=False):
     logger.debug("GEMS SOFTMAX")
 
-    assert dim >= -self.ndim and dim < self.ndim, "Invalid dim"
+    assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
 
-    if self.numel() == 0:
-        out_shape = list(self.shape)
-        out = torch.empty(out_shape, dtype=self.dtype, device=self.device)
+    if inp.numel() == 0:
+        out_shape = list(inp.shape)
+        out = torch.empty(out_shape, dtype=inp.dtype, device=inp.device)
         zero_(out)
         return out
 
-    dtype = torch.float32 if half_to_float else self.dtype
-    out = torch.empty_like(self, dtype=dtype)
-    return softmax_out(self, dim, half_to_float, out=out)
+    dtype = torch.float32 if half_to_float else inp.dtype
+    out = torch.empty_like(inp, dtype=dtype)
+    return softmax_out(inp, dim, half_to_float, out=out)
 
 
 def softmax_backward_out(grad_output, output, dim, input_dtype, *, grad_input):
